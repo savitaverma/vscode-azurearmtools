@@ -10,9 +10,10 @@ import { ProgressLocation, window, workspace } from 'vscode';
 import { callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, IActionContext, parseError } from 'vscode-azureextensionui';
 import { LanguageClient, LanguageClientOptions, RevealOutputChannelOn, ServerOptions } from 'vscode-languageclient';
 import { acquireSharedDotnetInstallation } from '../acquisition/acquireSharedDotnetInstallation';
-import { armTemplateLanguageId, configKeys, configPrefix, downloadDotnetVersion, languageFriendlyName, languageServerFolderName, languageServerName } from '../constants';
+import { armTemplateLanguageId, configKeys, configPrefix, downloadDotnetVersion, languageFriendlyName, languageServerFolderName, languageServerName, notifications } from '../constants';
 import { ext } from '../extensionVariables';
 import { assert } from '../fixed_assert';
+import { onRequestOpenLinkedFile } from '../linkedTemplates';
 import { templateDocumentSelector } from '../supported';
 import { WrappedErrorHandler } from './WrappedErrorHandler';
 
@@ -166,6 +167,10 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
 
             await client.onReady();
             ext.languageServerClient = client;
+
+            client.onRequest(notifications.openLinkedTemplate, async (args: { sourceTemplateUri: string; requestedLinkUri: string; requestedLinkResolvedUri: string }) => {
+                return onRequestOpenLinkedFile(args.sourceTemplateUri, args.requestedLinkUri, args.requestedLinkResolvedUri);
+            });
         } catch (error) {
             throw new Error(
                 `${languageServerName}: An error occurred starting the language server.${os.EOL}${os.EOL}${parseError(error).message}`
