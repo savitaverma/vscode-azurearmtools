@@ -2,21 +2,26 @@
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 // ----------------------------------------------------------------------------
 
+// tslint:disable: max-classes-per-file // Private classes are related to DeploymentTemplate implementation
+
 import * as assert from 'assert';
 import { CodeAction, CodeActionContext, Command, Range, Selection, Uri } from "vscode";
+import { Language } from '../extension.bundle';
 import { AzureRMAssets, FunctionsMetadata } from "./AzureRMAssets";
 import { CachedValue } from "./CachedValue";
 import { templateKeys } from "./constants";
-import { DeploymentDocument } from "./DeploymentDocument";
+import { DeploymentDocument, ResolvableCodeLens } from "./DeploymentDocument";
 import { Histogram } from "./Histogram";
 import { INamedDefinition } from "./INamedDefinition";
+import { IParameterDefinition } from './IParameterDefinition';
 import * as Json from "./JSON";
 import * as language from "./Language";
 import { DeploymentParameters } from "./parameterFiles/DeploymentParameters";
+import { getRelativeParameterFilePath } from './parameterFiles/parameterFiles';
 import { ReferenceList } from "./ReferenceList";
 import { isArmSchema } from "./schemas";
 import { TemplatePositionContext } from "./TemplatePositionContext";
-import { TemplateScope } from "./TemplateScope";
+import { TemplateScope, TemplateScopeKind } from "./TemplateScope";
 import { TopLevelTemplateScope } from './templateScopes';
 import * as TLE from "./TLE";
 import { nonNullValue } from './util/nonNull';
@@ -396,31 +401,84 @@ export class DeploymentTemplate extends DeploymentDocument {
         const spanOfValueInsideString = tleValue.getSpan();
         return this.getDocumentText(spanOfValueInsideString, parentStringToken.span.startIndex);
     }
+
+    public getCodeLenses(hasAssociatedParameters: boolean): ResolvableCodeLens[] {
+        return this.getParameterCodeLenses(hasAssociatedParameters)
+            .concat(this.getNestedTemplateCodeLenses());
+    }
+
+    private getParameterCodeLenses(hasAssociatedParameters: boolean): ResolvableCodeLens[] {
+        const lenses: ResolvableCodeLens[] = [];
+
+        // Code lens for the "parameters" section itself - indicates currently-selected parameter file and allows
+        // user to chnage it
+        const parametersCodeLensSpan = this.topLevelValue?.getProperty(templateKeys.parameters)?.span
+            ?? new language.Span(0, 0);
+        if (hasAssociatedParameters) {
+            lenses.push(new ShowCurrentParameterFileCodeLens(this, parametersCodeLensSpan));
+        }
+        lenses.push(new SelectParameterFileCodeLens(this, parametersCodeLensSpan));
+
+        if (hasAssociatedParameters) {
+            // Code lens for each parameter definition
+            lenses.push(...this.topLevelScope.parameterDefinitions.map(pd => new ParameterDefinitionCodeLens(this, pd)));
+        }
+
+        return lenses;
+    }
+
+    private getNestedTemplateCodeLenses(): ResolvableCodeLens[] {
+        const lenses: ResolvableCodeLens[] = [];
+        const allScopes = this.findAllScopes();
+        for (let scope of allScopes) {
+            if (scope.rootObject) {
+                const lens = NestedTemplateCodeLen.create(this, scope.rootObject.span, scope.scopeKind);
+                if (lens) {
+                    lenses.push(lens);
+                }
+            }
+        }
+
+        return lenses;
+    }
+
+    public findAllScopes(): TemplateScope[] {
+        const allScopes: TemplateScope[] = [];
+        traverse(this.topLevelScope);
+        return allScopes;
+
+        function traverse(scope: TemplateScope | undefined): void {
+            for (let childScope of scope?.childScopes ?? []) {
+                if (allScopes.indexOf(childScope) < 0) {
+                    allScopes.push(childScope);
+                } else {
+                    let a = 1;
+                    a = a;
+                }
+
+                traverse(childScope);
+            }
+        }
+    }
 }
+
+//#region StringParseAndScopeAssignmentVisitor
 
 class StringParseAndScopeAssignmentVisitor extends Json.Visitor {
     private readonly _jsonStringValueToTleParseResultMap: Map<Json.StringValue, TLE.ParseResult> = new Map<Json.StringValue, TLE.ParseResult>();
     private readonly _scopeStack: TemplateScope[] = [];
     private _currentScope: TemplateScope;
-    private readonly _allScopesInTemplate: TemplateScope[] = [];
+    private _allScopesInTemplate: TemplateScope[];
 
     public constructor(private readonly _dt: DeploymentTemplate) {
         super();
         this._currentScope = _dt.topLevelScope;
+        this._allScopesInTemplate = _dt.findAllScopes();
     }
 
     public createParsedStringMap(): Map<Json.StringValue, TLE.ParseResult> {
-        this.findAllScopes(this._dt.topLevelScope);
-
         this._dt.topLevelValue?.accept(this);
         return this._jsonStringValueToTleParseResultMap;
-    }
-
-    private findAllScopes(scope: TemplateScope): void {
-        for (let childScope of scope.childScopes) {
-            this._allScopesInTemplate.push(childScope);
-            this.findAllScopes(childScope);
-        }
     }
 
     public visitStringValue(jsonStringValue: Json.StringValue): void {
@@ -447,3 +505,125 @@ class StringParseAndScopeAssignmentVisitor extends Json.Visitor {
         }
     }
 }
+
+//#endregion
+
+//#region Code Lenses
+
+/**
+ * A code lens to indicate the current parameter file and to open it
+ */
+class ShowCurrentParameterFileCodeLens extends ResolvableCodeLens {
+    public constructor(dt: DeploymentTemplate, span: Language.Span) {
+        super(dt, span);
+    }
+
+    public resolve(associatedDocument: DeploymentDocument | undefined): void {
+        if (associatedDocument) {
+            assert(associatedDocument instanceof DeploymentParameters);
+            this.command = {
+                title: `Parameter file: "${getRelativeParameterFilePath(this.deploymentDoc.documentId, associatedDocument.documentId)}"`,
+                command: 'azurerm-vscode-tools.openParameterFile',
+                arguments: [this.deploymentDoc.documentId]
+            };
+        } else {
+            this.command = { title: '', command: '' };
+        }
+    }
+}
+
+/**
+ * A code lens to allow changing the current parameter file (or associating one if none currently)
+ */
+class SelectParameterFileCodeLens extends ResolvableCodeLens {
+    public constructor(dt: DeploymentTemplate, span: Language.Span) {
+        super(dt, span);
+    }
+
+    public resolve(associatedDocument: DeploymentDocument | undefined): void {
+        let title: string;
+        if (associatedDocument) {
+            assert(associatedDocument instanceof DeploymentParameters);
+            title = `Select parameter file...`;
+        } else {
+            title = "Select or create a parameter file to enable full validation...";
+        }
+
+        this.command = {
+            title,
+            command: 'azurerm-vscode-tools.selectParameterFile',
+            arguments: [this.deploymentDoc.documentId]
+        };
+    }
+}
+
+class ParameterDefinitionCodeLens extends ResolvableCodeLens {
+    public constructor(
+        dt: DeploymentTemplate,
+        private readonly parameterDefinition: IParameterDefinition
+    ) {
+        super(dt, parameterDefinition.nameValue.span);
+    }
+
+    public resolve(associatedDocument: DeploymentDocument | undefined): void {
+        if (associatedDocument) {
+            assert(associatedDocument instanceof DeploymentParameters);
+            const dp = associatedDocument as DeploymentParameters;
+
+            const paramValue = dp.getParameterValue(this.parameterDefinition.nameValue.unquotedValue);
+            const valueInParamFileAsString = paramValue?.value?.toFriendlyString(); //asdf
+            const defaultValueAsString = this.parameterDefinition.defaultValue?.toFriendlyString(); //asdf
+
+            let effectiveValueAsString;
+            if (valueInParamFileAsString !== undefined) {
+                effectiveValueAsString = `Value: "${valueInParamFileAsString}"`; //asdf - quotes
+            } else if (defaultValueAsString !== undefined) { //asdf
+                effectiveValueAsString = "Using default value";
+            } else {
+                effectiveValueAsString = "No value found";
+            }
+
+            this.command = {
+                title: effectiveValueAsString,
+                command: "azurerm-vscode-tools.codeLens.gotoParameterValue", //asdf
+                arguments: [
+                    dp.documentId,
+                    this.parameterDefinition.nameValue.unquotedValue // asdf if not found, should go to start of file or to "parameters"
+                ]
+            };
+        } else {
+            this.command = { title: '', command: '' };
+        }
+    }
+}
+
+class NestedTemplateCodeLen extends ResolvableCodeLens {
+    private constructor(
+        dt: DeploymentTemplate,
+        span: Language.Span,
+        title: string
+    ) {
+        super(dt, span);
+        this.command = {
+            title: title,
+            command: ''
+        };
+    }
+
+    public static create(dt: DeploymentTemplate, span: Language.Span, scopeKind: TemplateScopeKind): NestedTemplateCodeLen | undefined {
+        switch (scopeKind) {
+            case TemplateScopeKind.NestedDeploymentWithInnerScope:
+                return new NestedTemplateCodeLen(dt, span, "Nested template with inner scope");
+            case TemplateScopeKind.NestedDeploymentWithOuterScope:
+                return new NestedTemplateCodeLen(dt, span, "Nested template with inner scope");
+            default:
+                return undefined;
+        }
+    }
+
+    public resolve(_associatedDocument: DeploymentDocument | undefined): void {
+        // Nothing else to do
+    }
+}
+
+//#endregion
