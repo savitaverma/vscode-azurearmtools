@@ -11,21 +11,20 @@ import * as path from 'path';
 import * as vscode from "vscode";
 import { AzureUserInput, callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, createAzExtOutputChannel, IActionContext, registerCommand, registerUIExtensionVariables, TelemetryProperties } from "vscode-azureextensionui";
 import * as Completion from "./Completion";
-import { armTemplateLanguageId, configKeys, configPrefix, expressionsDiagnosticsCompletionMessage, expressionsDiagnosticsSource, globalStateKeys, outputChannelName, templateKeys } from "./constants";
-import { DeploymentDocument } from "./DeploymentDocument";
+import { armTemplateLanguageId, configKeys, configPrefix, expressionsDiagnosticsCompletionMessage, expressionsDiagnosticsSource, globalStateKeys, outputChannelName } from "./constants";
+import { DeploymentDocument, ResolvableCodeLens } from "./DeploymentDocument";
 import { DeploymentTemplate } from "./DeploymentTemplate";
 import { ext } from "./extensionVariables";
 import { Histogram } from "./Histogram";
 import * as Hover from './Hover';
 import { IncorrectArgumentsCountIssue } from "./IncorrectArgumentsCountIssue";
 import { getItemTypeQuickPicks, InsertItem } from "./insertItem";
-import { IParameterDefinition } from "./IParameterDefinition";
 import * as Json from "./JSON";
 import * as language from "./Language";
 import { startArmLanguageServer } from "./languageclient/startArmLanguageServer";
 import { DeploymentFileMapping } from "./parameterFiles/DeploymentFileMapping";
 import { DeploymentParameters } from "./parameterFiles/DeploymentParameters";
-import { considerQueryingForParameterFile, getFriendlyPathToFile, getRelativeParameterFilePath, openParameterFile, openTemplateFile, selectParameterFile } from "./parameterFiles/parameterFiles";
+import { considerQueryingForParameterFile, getFriendlyPathToFile, openParameterFile, openTemplateFile, selectParameterFile } from "./parameterFiles/parameterFiles";
 import { setParameterFileContext } from "./parameterFiles/setParameterFileContext";
 import { IReferenceSite, PositionContext } from "./PositionContext";
 import { ReferenceList } from "./ReferenceList";
@@ -90,6 +89,7 @@ export class AzureRMTools {
     private _areDeploymentTemplateEventsHookedUp: boolean = false;
     private _diagnosticsVersion: number = 0;
     private _mapping: DeploymentFileMapping = ext.deploymentFileMapping.getValue();
+    private _codeLensChangedEmitter: vscode.EventEmitter<void> = new vscode.EventEmitter<void>();
 
     // More information can be found about this definition at https://code.visualstudio.com/docs/extensionAPI/vscode-api#DecorationRenderOptions
     // Several of these properties are CSS properties. More information about those can be found at https://www.w3.org/wiki/CSS/Properties
@@ -198,7 +198,7 @@ export class AzureRMTools {
             await this.addMissingParameters(actionContext, source, true);
         });
 
-        // Code lens commands
+        // Code lens commands //asdf
         registerCommand(
             "azurerm-vscode-tools.codeLens.gotoParameterValue",
             async (actionContext: IActionContext, uri: vscode.Uri, param: string) => {
@@ -227,6 +227,7 @@ export class AzureRMTools {
                 this._mapping.resetCache();
                 // tslint:disable-next-line: no-floating-promises
                 this.updateEditorState();
+                this._codeLensChangedEmitter.fire();
             },
             this,
             context.subscriptions);
@@ -300,6 +301,8 @@ export class AzureRMTools {
         } else {
             this._deploymentDocuments.delete(normalizedPath);
         }
+
+        this._codeLensChangedEmitter.fire(); //asdf
     }
 
     private getOpenedDeploymentDocument(documentOrUri: vscode.TextDocument | vscode.Uri): DeploymentDocument | undefined {
@@ -740,7 +743,8 @@ export class AzureRMTools {
             };
             ext.context.subscriptions.push(vscode.languages.registerHoverProvider(templateDocumentSelector, hoverProvider));
 
-            const codeLensProvider: vscode.CodeLensProvider = {
+            const codeLensProvider = {
+                onDidChangeCodeLenses: this._codeLensChangedEmitter.event,
                 provideCodeLenses: async (document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.CodeLens[] | undefined> => {
                     return await this.onProvideCodeLenses(document, token);
                 },
@@ -1005,82 +1009,56 @@ export class AzureRMTools {
         this.setOpenedDeploymentDocument(document.uri, undefined);
     }
 
-    private async onProvideCodeLenses(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.CodeLens[] | undefined> {
+    private async onProvideCodeLenses(textDocument: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.CodeLens[] | undefined> {
         return await callWithTelemetryAndErrorHandling('ProvideCodeLenses', async (actionContext: IActionContext): Promise<vscode.CodeLens[] | undefined> => {
             actionContext.errorHandling.suppressDisplay = true;
             actionContext.telemetry.suppressIfSuccessful = true;
-
-            const cancel = new Cancellation(token, actionContext);
-            const lenses: vscode.CodeLens[] = [];
-
-            //asdf only for template
-            //const dt = this.getOpenedDeploymentTemplate(document.uri);
-            const { doc: dt, associatedDoc: dp } = await this.getDeploymentDocAndAssociatedDoc(document, cancel);
-            if (dt instanceof DeploymentTemplate) {
-                const parameterFileCodeLensSpan = dt.topLevelValue?.getProperty(templateKeys.parameters)?.span
-                    ?? new language.Span(0, 0);
-
-                if (dp instanceof DeploymentParameters) {
-                    lenses.push(...dt.topLevelScope.parameterDefinitions.map(pd => {
-                        const lens = new vscode.CodeLens(getVSCodeRangeFromSpan(dt, pd.nameValue.span));
-                        // tslint:disable-next-line: no-any
-                        (<any>lens).dt = dt;
-                        // tslint:disable-next-line: no-any
-                        (<any>lens).pd = pd;
-                        // tslint:disable-next-line: no-any
-                        (<any>lens).dp = dp;
-                        return lens;
-                    }));
-
-                    lenses.push(
-                        new vscode.CodeLens(
-                            getVSCodeRangeFromSpan(dt, parameterFileCodeLensSpan),
-                            {
-                                title: `Selected parameter file: "${getRelativeParameterFilePath(dt.documentId, dp.documentId)}"`,
-                                command: 'azurerm-vscode-tools.selectParameterFile',
-                                arguments: [dt.documentId]
-                            }));
-                } else if (dt instanceof DeploymentTemplate) {
-                    lenses.push(
-                        new vscode.CodeLens(
-                            getVSCodeRangeFromSpan(dt, parameterFileCodeLensSpan),
-                            {
-                                title: "Select or create a parameter file to enable full validation...",
-                                command: 'azurerm-vscode-tools.selectParameterFile',
-                                arguments: [dt.documentId]
-                            }));
-                }
+            const doc = this.getOpenedDeploymentDocument(textDocument.uri);
+            if (doc) {
+                return doc.getCodeLenses();
             }
 
-            return lenses;
+            return undefined;
         });
     }
 
     private async onResolveCodeLens(codeLens: vscode.CodeLens, token: vscode.CancellationToken): Promise<vscode.CodeLens | undefined> {
-        const lens = <{ pd: IParameterDefinition; dt: DeploymentTemplate; dp: DeploymentParameters } & vscode.CodeLens>codeLens;
-        const paramValue = lens.dp.getParameterValue(lens.pd.nameValue.unquotedValue);
-        const valueInParamFileAsString = paramValue?.value?.toFriendlyString();
-        const defaultValueAsString = lens.pd.defaultValue?.toFriendlyString(); //asdf
-
-        let effectiveValueAsString;
-        if (valueInParamFileAsString !== undefined) {
-            effectiveValueAsString = `Value: "${valueInParamFileAsString}"`; //asdf
-        } else if (defaultValueAsString !== undefined) { //asdf
-            effectiveValueAsString = "Using default value";
+        if (codeLens instanceof ResolvableCodeLens) {
+            const cancel = new Cancellation(token);
+            const { doc, associatedDoc } = await this.getDeploymentDocAndAssociatedDoc(codeLens.deploymentDoc.documentId, cancel);
+            if (doc && codeLens.deploymentDoc === doc) {
+                codeLens.resolve(associatedDoc);
+                return codeLens;
+            }
         } else {
-            effectiveValueAsString = "No value specified";
+            assert.fail('Expected ResolvableCodeLens instance');
         }
 
-        codeLens.command = {
-            // tslint:disable-next-line: no-unsafe-any no-any
-            title: effectiveValueAsString,
-            command: "azurerm-vscode-tools.codeLens.gotoParameterValue", //asdf
-            arguments: [
-                lens.dp.documentId,
-                lens.pd.nameValue.unquotedValue
-            ]
-        };
-        return codeLens;
+        return undefined;
+        // const lens = <{ pd: IParameterDefinition; dt: DeploymentTemplate; dp: DeploymentParameters } & vscode.CodeLens>codeLens;
+        // const paramValue = lens.dp.getParameterValue(lens.pd.nameValue.unquotedValue);
+        // const valueInParamFileAsString = paramValue?.value?.toFriendlyString();
+        // const defaultValueAsString = lens.pd.defaultValue?.toFriendlyString(); //asdf
+
+        // let effectiveValueAsString;
+        // if (valueInParamFileAsString !== undefined) {
+        //     effectiveValueAsString = `Value: "${valueInParamFileAsString}"`; //asdf
+        // } else if (defaultValueAsString !== undefined) { //asdf
+        //     effectiveValueAsString = "Using default value";
+        // } else {
+        //     effectiveValueAsString = "No value specified";
+        // }
+
+        // codeLens.command = {
+        //     // tslint:disable-next-line: no-unsafe-any no-any
+        //     title: effectiveValueAsString,
+        //     command: "azurerm-vscode-tools.codeLens.gotoParameterValue", //asdf
+        //     arguments: [
+        //         lens.dp.documentId,
+        //         lens.pd.nameValue.unquotedValue
+        //     ]
+        // };
+        // return codeLens;
     }
 
     private async onProvideHover(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Hover | undefined> {
@@ -1147,18 +1125,19 @@ export class AzureRMTools {
         return item;
     }
 
+    //asdf cache
     /**
      * Given a document, get a DeploymentTemplate or DeploymentParameters instance from it, and then
      * find the appropriate associated document for it
      */
-    //asdf cache
     private async getDeploymentDocAndAssociatedDoc(
-        textDocument: vscode.TextDocument,
+        documentOrUri: vscode.TextDocument | vscode.Uri,
         cancel: Cancellation
     ): Promise<{ doc?: DeploymentDocument; associatedDoc?: DeploymentDocument }> {
         cancel.throwIfCancelled();
 
-        const doc = this.getOpenedDeploymentDocument(textDocument);
+        const docUri = documentOrUri instanceof vscode.Uri ? documentOrUri : documentOrUri.uri;
+        const doc = this.getOpenedDeploymentDocument(docUri);
         if (!doc) {
             // No reason to try reading from disk, if it's not in our opened list,
             // it can't be the one in the current text document
@@ -1169,7 +1148,7 @@ export class AzureRMTools {
             const template: DeploymentTemplate = doc;
             // It's a template file - find the associated parameter file, if any
             let params: DeploymentParameters | undefined;
-            const paramsUri: vscode.Uri | undefined = this._mapping.getParameterFile(textDocument.uri);
+            const paramsUri: vscode.Uri | undefined = this._mapping.getParameterFile(docUri);
             if (paramsUri) {
                 params = await this.getOrReadTemplateParameters(paramsUri);
                 cancel.throwIfCancelled();
@@ -1180,7 +1159,7 @@ export class AzureRMTools {
             const params: DeploymentParameters = doc;
             // It's a parameter file - find the associated template file, if any
             let template: DeploymentTemplate | undefined;
-            const templateUri: vscode.Uri | undefined = this._mapping.getTemplateFile(textDocument.uri);
+            const templateUri: vscode.Uri | undefined = this._mapping.getTemplateFile(docUri);
             if (templateUri) {
                 template = await this.getOrReadDeploymentTemplate(templateUri);
                 cancel.throwIfCancelled();

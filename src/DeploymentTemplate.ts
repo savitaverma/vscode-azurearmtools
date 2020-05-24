@@ -2,21 +2,25 @@
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 // ----------------------------------------------------------------------------
 
+// tslint:disable: max-classes-per-file // Private classes are related to DeploymentTemplate implementation
+
 import * as assert from 'assert';
 import { CodeAction, CodeActionContext, Command, Range, Selection, Uri } from "vscode";
+import { Language } from '../extension.bundle';
 import { AzureRMAssets, FunctionsMetadata } from "./AzureRMAssets";
 import { CachedValue } from "./CachedValue";
 import { templateKeys } from "./constants";
-import { DeploymentDocument } from "./DeploymentDocument";
+import { DeploymentDocument, ResolvableCodeLens } from "./DeploymentDocument";
 import { Histogram } from "./Histogram";
 import { INamedDefinition } from "./INamedDefinition";
 import * as Json from "./JSON";
 import * as language from "./Language";
 import { DeploymentParameters } from "./parameterFiles/DeploymentParameters";
+import { getRelativeParameterFilePath } from './parameterFiles/parameterFiles';
 import { ReferenceList } from "./ReferenceList";
 import { isArmSchema } from "./schemas";
 import { TemplatePositionContext } from "./TemplatePositionContext";
-import { TemplateScope } from "./TemplateScope";
+import { TemplateScope, TemplateScopeKind } from "./TemplateScope";
 import { TopLevelTemplateScope } from './templateScopes';
 import * as TLE from "./TLE";
 import { nonNullValue } from './util/nonNull';
@@ -396,31 +400,105 @@ export class DeploymentTemplate extends DeploymentDocument {
         const spanOfValueInsideString = tleValue.getSpan();
         return this.getDocumentText(spanOfValueInsideString, parentStringToken.span.startIndex);
     }
+
+    public getCodeLenses(): ResolvableCodeLens[] {
+        return this.getParameterCodeLenses()
+            .concat(this.getNestedTemplateCodeLenses());
+    }
+
+    private getParameterCodeLenses(): ResolvableCodeLens[] {
+        const lenses: ResolvableCodeLens[] = [];
+
+        // Code lens for the "parameters" section itself
+        const parametersCodeLensSpan = this.topLevelValue?.getProperty(templateKeys.parameters)?.span
+            ?? new language.Span(0, 0);
+        lenses.push(new ParametersSectionCodeLens(this, parametersCodeLensSpan));
+
+        // if (associatedParameters) {
+        //     lenses.push(
+        //         new CodeLens(
+        //             vscodeParametersCodeLensSpan,
+        //             {
+        //                 title: `Selected parameter file: "${getRelativeParameterFilePath(this.documentId, associatedParameters.documentId)}"`,
+        //                 command: 'azurerm-vscode-tools.selectParameterFile',
+        //                 arguments: [this.documentId]
+        //             }));
+
+        //     // Code lens for each parameter definition
+        //     lenses.push(...this.topLevelScope.parameterDefinitions.map(pd => {
+        //         const lens = new CodeLens(getVSCodeRangeFromSpan(this, pd.nameValue.span));
+        //         // // tslint:disable-next-line: no-any //asdf
+        //         // (<any>lens).dt = dt;
+        //         // // tslint:disable-next-line: no-any //asdf
+        //         // (<any>lens).pd = pd;
+        //         // // tslint:disable-next-line: no-any //asdf
+        //         // (<any>lens).dp = associatedParameters;
+        //         return lens;
+        //     }));
+        // } else {
+        //     lenses.push(
+        //         new CodeLens(
+        //             vscodeParametersCodeLensSpan,
+        //             {
+        //                 title: "Select or create a parameter file to enable full validation...",
+        //                 command: 'azurerm-vscode-tools.selectParameterFile',
+        //                 arguments: [this.documentId]
+        //             }));
+        // }
+
+        return lenses;
+    }
+
+    private getNestedTemplateCodeLenses(): ResolvableCodeLens[] {
+        const lenses: ResolvableCodeLens[] = [];
+        const allScopes = this.findAllScopes();
+        for (let scope of allScopes) {
+            if (scope.rootObject) {
+                const lens = NestedTemplateCodeLen.create(this, scope.rootObject.span, scope.scopeKind);
+                if (lens) {
+                    lenses.push(lens);
+                }
+            }
+        }
+
+        return lenses;
+    }
+
+    public findAllScopes(): TemplateScope[] {
+        const allScopes: TemplateScope[] = [];
+        traverse(this.topLevelScope);
+        return allScopes;
+
+        function traverse(scope: TemplateScope | undefined): void {
+            for (let childScope of scope?.childScopes ?? []) {
+                if (allScopes.indexOf(childScope) < 0) {
+                    allScopes.push(childScope);
+                } else {
+                    let a = 1;
+                    a = a;
+                }
+
+                traverse(childScope);
+            }
+        }
+    }
 }
 
 class StringParseAndScopeAssignmentVisitor extends Json.Visitor {
     private readonly _jsonStringValueToTleParseResultMap: Map<Json.StringValue, TLE.ParseResult> = new Map<Json.StringValue, TLE.ParseResult>();
     private readonly _scopeStack: TemplateScope[] = [];
     private _currentScope: TemplateScope;
-    private readonly _allScopesInTemplate: TemplateScope[] = [];
+    private _allScopesInTemplate: TemplateScope[];
 
     public constructor(private readonly _dt: DeploymentTemplate) {
         super();
         this._currentScope = _dt.topLevelScope;
+        this._allScopesInTemplate = _dt.findAllScopes();
     }
 
     public createParsedStringMap(): Map<Json.StringValue, TLE.ParseResult> {
-        this.findAllScopes(this._dt.topLevelScope);
-
         this._dt.topLevelValue?.accept(this);
         return this._jsonStringValueToTleParseResultMap;
-    }
-
-    private findAllScopes(scope: TemplateScope): void {
-        for (let childScope of scope.childScopes) {
-            this._allScopesInTemplate.push(childScope);
-            this.findAllScopes(childScope);
-        }
     }
 
     public visitStringValue(jsonStringValue: Json.StringValue): void {
@@ -445,5 +523,57 @@ class StringParseAndScopeAssignmentVisitor extends Json.Visitor {
             this._currentScope = nonNullValue(this._scopeStack.pop(), "Scopes stack should not be empty");
             assert(this._currentScope === currentScope);
         }
+    }
+}
+
+class ParametersSectionCodeLens extends ResolvableCodeLens {
+    public constructor(private readonly dt: DeploymentTemplate, span: Language.Span) {
+        super(dt, span);
+    }
+
+    public resolve(associatedDocument: DeploymentDocument | undefined): void {
+        if (associatedDocument) {
+            assert(associatedDocument instanceof DeploymentParameters);
+            this.command = {
+                title: `Selected parameter file: "${getRelativeParameterFilePath(this.dt.documentId, associatedDocument.documentId)}"`,
+                command: 'azurerm-vscode-tools.selectParameterFile',
+                arguments: [this.dt.documentId]
+            };
+        } else {
+            this.command = {
+                title: "Select or create a parameter file to enable full validation...",
+                command: 'azurerm-vscode-tools.selectParameterFile',
+                arguments: [this.dt.documentId]
+            };
+        }
+    }
+}
+
+class NestedTemplateCodeLen extends ResolvableCodeLens {
+    private constructor(
+        dt: DeploymentTemplate,
+        span: Language.Span,
+        title: string
+    ) {
+        super(dt, span);
+        this.command = {
+            title: title,
+            command: ''
+        };
+    }
+
+    public static create(dt: DeploymentTemplate, span: Language.Span, scopeKind: TemplateScopeKind): NestedTemplateCodeLen | undefined {
+        switch (scopeKind) {
+            case TemplateScopeKind.NestedDeploymentWithInnerScope:
+                return new NestedTemplateCodeLen(dt, span, "Nested template with inner scope");
+            case TemplateScopeKind.NestedDeploymentWithOuterScope:
+                return new NestedTemplateCodeLen(dt, span, "Nested template with inner scope");
+            default:
+                return undefined;
+        }
+    }
+
+    public resolve(_associatedDocument: DeploymentDocument | undefined): void {
+        // Nothing else to do
     }
 }
