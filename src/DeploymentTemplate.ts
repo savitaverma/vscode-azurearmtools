@@ -3,7 +3,8 @@
 // ----------------------------------------------------------------------------
 
 import * as assert from 'assert';
-import { CodeAction, CodeActionContext, Command, Range, Selection, Uri } from "vscode";
+import { CodeAction, CodeActionContext, CodeLens, Command, Range, Selection, TextDocument, Uri } from "vscode";
+import { IActionContext } from 'vscode-azureextensionui';
 import { AzureRMAssets, FunctionsMetadata } from "./AzureRMAssets";
 import { CachedValue } from "./CachedValue";
 import { templateKeys } from "./constants";
@@ -16,10 +17,13 @@ import { DeploymentParameters } from "./parameterFiles/DeploymentParameters";
 import { ReferenceList } from "./ReferenceList";
 import { isArmSchema } from "./schemas";
 import { TemplatePositionContext } from "./TemplatePositionContext";
-import { TemplateScope } from "./TemplateScope";
+import { TemplateScope, TemplateScopeKind } from "./TemplateScope";
 import { TopLevelTemplateScope } from './templateScopes';
 import * as TLE from "./TLE";
+import { assertNever } from './util/assertNever';
 import { nonNullValue } from './util/nonNull';
+import { Cancellation } from './util/throwOnCancel';
+import { getVSCodeRangeFromSpan } from './util/vscodePosition';
 import { FindReferencesVisitor } from "./visitors/FindReferencesVisitor";
 import { FunctionCountVisitor } from "./visitors/FunctionCountVisitor";
 import { GenericStringVisitor } from "./visitors/GenericStringVisitor";
@@ -395,6 +399,56 @@ export class DeploymentTemplate extends DeploymentDocument {
         assert.equal(parentStringToken.type, Json.TokenType.QuotedString);
         const spanOfValueInsideString = tleValue.getSpan();
         return this.getDocumentText(spanOfValueInsideString, parentStringToken.span.startIndex);
+    }
+
+    public async getCodeLenses(document: TextDocument, cancel: Cancellation, actionContext: IActionContext): Promise<CodeLens[] | undefined> {
+        const lenses: CodeLens[] = [];
+
+        const allScopesInTemplate: TemplateScope[] = [];
+        function findAllScopes(scope: TemplateScope): void {
+            for (let childScope of scope.childScopes) {
+                allScopesInTemplate.push(childScope);
+                findAllScopes(childScope);
+            }
+        }
+
+        findAllScopes(this.topLevelScope); //asdf getting duplicate scopes for UDF methods
+        for (let scope of allScopesInTemplate) {
+            if (scope.rootObject) {
+                let kind: string;
+                switch (scope.scopeKind) {
+                    case TemplateScopeKind.NestedDeploymentWithInnerScope:
+                        kind = "Nested template with inner scope";
+                        break;
+                    case TemplateScopeKind.NestedDeploymentWithOuterScope:
+                        kind = "Nested template with outer scope";
+                        break;
+                    case TemplateScopeKind.ParameterDefaultValue:
+                        kind = "New scope for parameter default value";
+                        break;
+                    case TemplateScopeKind.TopLevel:
+                        kind = "Top-level scope";
+                        break;
+                    case TemplateScopeKind.UserFunction:
+                        kind = "New scope for user-defined function";
+                        break;
+                    default:
+                        assertNever(scope.scopeKind);
+                }
+                lenses.push(
+
+                    new CodeLens(
+                        getVSCodeRangeFromSpan(this, scope.rootObject?.span),
+                        {
+                            title: kind,
+                            command: 'azurerm-vscode-tools.selectParameterFile', //asdf
+                            //arguments: [dt.documentId]
+                        })
+                );
+            }
+        }
+
+        return lenses;
     }
 }
 

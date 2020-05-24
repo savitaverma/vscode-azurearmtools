@@ -11,7 +11,7 @@ import * as path from 'path';
 import * as vscode from "vscode";
 import { AzureUserInput, callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, createAzExtOutputChannel, IActionContext, registerCommand, registerUIExtensionVariables, TelemetryProperties } from "vscode-azureextensionui";
 import * as Completion from "./Completion";
-import { armTemplateLanguageId, configKeys, configPrefix, expressionsDiagnosticsCompletionMessage, expressionsDiagnosticsSource, globalStateKeys, outputChannelName, templateKeys } from "./constants";
+import { armTemplateLanguageId, configKeys, configPrefix, expressionsDiagnosticsCompletionMessage, expressionsDiagnosticsSource, globalStateKeys, outputChannelName } from "./constants";
 import { DeploymentDocument } from "./DeploymentDocument";
 import { DeploymentTemplate } from "./DeploymentTemplate";
 import { ext } from "./extensionVariables";
@@ -25,7 +25,7 @@ import * as language from "./Language";
 import { startArmLanguageServer } from "./languageclient/startArmLanguageServer";
 import { DeploymentFileMapping } from "./parameterFiles/DeploymentFileMapping";
 import { DeploymentParameters } from "./parameterFiles/DeploymentParameters";
-import { considerQueryingForParameterFile, getFriendlyPathToFile, getRelativeParameterFilePath, openParameterFile, openTemplateFile, selectParameterFile } from "./parameterFiles/parameterFiles";
+import { considerQueryingForParameterFile, getFriendlyPathToFile, openParameterFile, openTemplateFile, selectParameterFile } from "./parameterFiles/parameterFiles";
 import { setParameterFileContext } from "./parameterFiles/setParameterFileContext";
 import { IReferenceSite, PositionContext } from "./PositionContext";
 import { ReferenceList } from "./ReferenceList";
@@ -198,22 +198,22 @@ export class AzureRMTools {
             await this.addMissingParameters(actionContext, source, true);
         });
 
-        // Code lens commands
-        registerCommand(
-            "azurerm-vscode-tools.codeLens.gotoParameterValue",
-            async (actionContext: IActionContext, uri: vscode.Uri, param: string) => {
-                let textDocument: vscode.TextDocument = await vscode.workspace.openTextDocument(uri);
-                const editor = await vscode.window.showTextDocument(textDocument);
-                const dp = this.getOpenedDeploymentParameters(uri);
-                if (dp) {
-                    const span = dp.getParameterValue(param)?.value?.span;
-                    if (span) {
-                        const range = getVSCodeRangeFromSpan(dp, span);
-                        editor.selection = new vscode.Selection(range.start, range.end);
-                        editor.revealRange(range);
-                    }
-                }
-            });
+        // Code lens commands //asdf
+        // registerCommand(
+        //     "azurerm-vscode-tools.codeLens.gotoParameterValue",
+        //     async (actionContext: IActionContext, uri: vscode.Uri, param: string) => {
+        //         let textDocument: vscode.TextDocument = await vscode.workspace.openTextDocument(uri);
+        //         const editor = await vscode.window.showTextDocument(textDocument);
+        //         const dp = this.getOpenedDeploymentParameters(uri);
+        //         if (dp) {
+        //             const span = dp.getParameterValue(param)?.value?.span;
+        //             if (span) {
+        //                 const range = getVSCodeRangeFromSpan(dp, span);
+        //                 editor.selection = new vscode.Selection(range.start, range.end);
+        //                 editor.revealRange(range);
+        //             }
+        //         }
+        //     });
 
         this._paramsStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
         ext.context.subscriptions.push(this._paramsStatusBarItem);
@@ -1014,42 +1014,10 @@ export class AzureRMTools {
             const lenses: vscode.CodeLens[] = [];
 
             //asdf only for template
-            //const dt = this.getOpenedDeploymentTemplate(document.uri);
-            const { doc: dt, associatedDoc: dp } = await this.getDeploymentDocAndAssociatedDoc(document, cancel);
-            if (dt instanceof DeploymentTemplate) {
-                const parameterFileCodeLensSpan = dt.topLevelValue?.getProperty(templateKeys.parameters)?.span
-                    ?? new language.Span(0, 0);
-
-                if (dp instanceof DeploymentParameters) {
-                    lenses.push(...dt.topLevelScope.parameterDefinitions.map(pd => {
-                        const lens = new vscode.CodeLens(getVSCodeRangeFromSpan(dt, pd.nameValue.span));
-                        // tslint:disable-next-line: no-any
-                        (<any>lens).dt = dt;
-                        // tslint:disable-next-line: no-any
-                        (<any>lens).pd = pd;
-                        // tslint:disable-next-line: no-any
-                        (<any>lens).dp = dp;
-                        return lens;
-                    }));
-
-                    lenses.push(
-                        new vscode.CodeLens(
-                            getVSCodeRangeFromSpan(dt, parameterFileCodeLensSpan),
-                            {
-                                title: `Selected parameter file: "${getRelativeParameterFilePath(dt.documentId, dp.documentId)}"`,
-                                command: 'azurerm-vscode-tools.selectParameterFile',
-                                arguments: [dt.documentId]
-                            }));
-                } else if (dt instanceof DeploymentTemplate) {
-                    lenses.push(
-                        new vscode.CodeLens(
-                            getVSCodeRangeFromSpan(dt, parameterFileCodeLensSpan),
-                            {
-                                title: "Select or create a parameter file to enable full validation...",
-                                command: 'azurerm-vscode-tools.selectParameterFile',
-                                arguments: [dt.documentId]
-                            }));
-                }
+            const dt = this.getOpenedDeploymentTemplate(document.uri);
+            //const { doc: dt, associatedDoc: dp } = await this.getDeploymentDocAndAssociatedDoc(document, cancel);
+            if (dt) {
+                return await dt.getCodeLenses(document, cancel, actionContext);
             }
 
             return lenses;
