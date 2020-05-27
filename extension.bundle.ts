@@ -36,7 +36,7 @@ export { CompletionsSpy, ICompletionsSpyResult } from "./src/CompletionsSpy";
 export { IConfiguration } from "./src/Configuration";
 export { armTemplateLanguageId, basePath, configKeys, configPrefix, diagnosticsCompletePrefix, expressionsDiagnosticsSource, isWin32, languageServerStateSource, templateKeys } from "./src/constants";
 export { __debugMarkPositionInString, __debugMarkRangeInString, __debugMarkRangeInString as __debugMarkSubstring } from "./src/debugMarkStrings";
-export { DeploymentTemplate } from "./src/DeploymentTemplate";
+export { DeploymentTemplate, ParameterDefinitionCodeLens } from "./src/DeploymentTemplate";
 export { Duration } from './src/Duration';
 export { ExpressionType } from "./src/ExpressionType";
 export { ext } from './src/extensionVariables';

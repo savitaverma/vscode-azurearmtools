@@ -7,6 +7,7 @@
 
 import * as assert from "assert";
 import { Position, Range, Uri } from "vscode";
+import { ParameterDefinitionCodeLens } from "../extension.bundle";
 import { IDeploymentTemplate } from "./support/diagnostics";
 import { parseParametersWithMarkers, parseTemplate } from "./support/parseTemplate";
 import { stringify } from "./support/stringify";
@@ -43,6 +44,8 @@ suite("DeploymentTemplate code lens", () => {
                 "type": "securestring",
                 "defaultValue": "abc"
             },
+
+            //asdf keyvault ref
 
             "requiredBool": {
                 "type": "bool"
@@ -81,7 +84,6 @@ suite("DeploymentTemplate code lens", () => {
                     "value1": true
                 }
             }
-
         },
         "functions": [
         ],
@@ -150,6 +152,83 @@ suite("DeploymentTemplate code lens", () => {
                 assert(selectLens.command?.arguments![0] instanceof Uri);
                 assert.equal(selectLens.command?.arguments[0].toString(), dt.documentId.toString());
             });
+        });
+    });
+
+    suite("parameter definition code lenses with a parameter file", () => {
+        function createParamLensTest(topLevelParamName: string, valueInParamFile: string | undefined, expectedTitle: string): void {
+            const testName = valueInParamFile === undefined ?
+                `${topLevelParamName} with no value in param file` :
+                `${topLevelParamName} with value ${valueInParamFile}`;
+            test(testName, async () => {
+                const dt = await parseTemplate(template);
+                const param = dt.topLevelScope.getParameterDefinition(topLevelParamName);
+                assert(!!param);
+                const { dp } = await parseParametersWithMarkers(
+                    valueInParamFile === undefined ? {
+                        "parameters": {}
+                    } : `{
+                        "parameters": {
+                            "${topLevelParamName}": {
+                                "value": ${valueInParamFile}
+                            }
+                        }
+                    }`);
+                const lenses = dt.getCodeLenses(true)
+                    .filter(l => l instanceof ParameterDefinitionCodeLens)
+                    .map(l => <ParameterDefinitionCodeLens>l);
+                assert.equal(lenses.length, dt.topLevelScope.parameterDefinitions.length);
+
+                // Find the code lens for the parameter
+                const lens = lenses.find(l => l.parameterDefinition === param);
+                assert(!!lens, `Couldn't find a code lens for parameter ${param.nameValue.unquotedValue}`);
+
+                lens.resolve(dp);
+                assert.equal(lens.command?.command, "azurerm-vscode-tools.codeLens.gotoParameterValue");
+                assert.deepEqual(lens.command?.arguments, [
+                    dp.documentId,
+                    param.nameValue.unquotedValue
+                ]);
+                assert.equal(lens.command?.title, expectedTitle);
+            });
+        }
+
+        createParamLensTest('requiredInt', '123', 'Value: 123');
+        createParamLensTest('requiredInt', '-123', 'Value: -123');
+        createParamLensTest('optionalInt', undefined, 'Using default value: 123');
+        createParamLensTest('requiredInt', undefined, 'No value found');
+
+        createParamLensTest('requiredString', 'def', 'Value: "def"');
+        createParamLensTest('optionalString', undefined, 'Using default value: "abc"');
+        createParamLensTest('requiredString', undefined, 'No value found');
+
+        createParamLensTest('optionalSecureString', 'def', 'Value: "def"');
+        createParamLensTest('optionalSecureString', undefined, 'Using default value: "abc"');
+
+        createParamLensTest('optionalBool', 'true', 'Value: true');
+        createParamLensTest('optionalBool', 'false', 'Value: false');
+        createParamLensTest('optionalBool', undefined, 'Using default value: true');
+
+        createParamLensTest('optionalArray', '[]', 'Value: []');
+        createParamLensTest('optionalArray', '[\n]', 'Value: []');
+        createParamLensTest('optionalArray', '[\r\n]', 'Value: []');
+        createParamLensTest('optionalArray', '[\r\n\t     123\t\r\n    ]', 'Value: [123]');
+        createParamLensTest('optionalArray', '[\r\n\t     {"a": "b"}\t\r\n    ]', 'Value: [{"a": "b"}]');
+        createParamLensTest('optionalArray', undefined, 'Using default value: [true]');
+
+        createParamLensTest('optionalObject', '{}', 'Value: {}');
+        createParamLensTest('optionalObject', '{\r\n"a": "b",\r\n  "i": -123}', 'Value: {"a": "b", "i": -123}');
+        createParamLensTest('optionalObject', undefined, 'Using default value: {"myTrueProp": true}');
+
+        createParamLensTest('optionalSecureObject', '{}', 'Value: {}');
+        createParamLensTest('optionalSecureObject', '{}', 'Value: {"value1": true}');
+
+        suite("undefined in param value", () => {
+            createParamLensTest('optionalString', 'undefined', 'Value: undefined');
+        });
+        suite("Expression in default value", () => {
+            createParamLensTest('optionalString2', '"123"', 'Value: "123"');
+            createParamLensTest('optionalString2', undefined, `Using default value: "[parameters('optionalString')]"`);
         });
     });
 });

@@ -557,10 +557,10 @@ class SelectParameterFileCodeLens extends ResolvableCodeLens {
     }
 }
 
-class ParameterDefinitionCodeLens extends ResolvableCodeLens {
+export class ParameterDefinitionCodeLens extends ResolvableCodeLens {
     public constructor(
         dt: DeploymentTemplate,
-        private readonly parameterDefinition: IParameterDefinition
+        public readonly parameterDefinition: IParameterDefinition
     ) {
         super(dt, parameterDefinition.nameValue.span);
     }
@@ -571,20 +571,20 @@ class ParameterDefinitionCodeLens extends ResolvableCodeLens {
             const dp = associatedDocument as DeploymentParameters;
 
             const paramValue = dp.getParameterValue(this.parameterDefinition.nameValue.unquotedValue);
-            const valueInParamFileAsString = paramValue?.value?.toFriendlyString(); //asdf
-            const defaultValueAsString = this.parameterDefinition.defaultValue?.toFriendlyString(); //asdf
+            const givenValueAsString = paramValue?.value?.toFullFriendlyString();
+            const defaultValueAsString = this.parameterDefinition.defaultValue?.toFullFriendlyString();
 
-            let effectiveValueAsString;
-            if (valueInParamFileAsString !== undefined) {
-                effectiveValueAsString = `Value: "${valueInParamFileAsString}"`; //asdf - quotes
+            let title;
+            if (givenValueAsString !== undefined) {
+                title = `Value: ${givenValueAsString}`; //asdf - quotes
             } else if (defaultValueAsString !== undefined) { //asdf
-                effectiveValueAsString = "Using default value";
+                title = `Using default value: ${defaultValueAsString}`;
             } else {
-                effectiveValueAsString = "No value found";
+                title = "No value found";
             }
 
             this.command = {
-                title: effectiveValueAsString,
+                title: title,
                 command: "azurerm-vscode-tools.codeLens.gotoParameterValue", //asdf
                 arguments: [
                     dp.documentId,
