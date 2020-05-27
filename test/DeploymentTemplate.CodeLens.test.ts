@@ -198,11 +198,11 @@ suite("DeploymentTemplate code lens", () => {
         createParamLensTest('optionalInt', undefined, 'Using default value: 123');
         createParamLensTest('requiredInt', undefined, 'No value found');
 
-        createParamLensTest('requiredString', 'def', 'Value: "def"');
+        createParamLensTest('requiredString', '"def"', 'Value: "def"');
         createParamLensTest('optionalString', undefined, 'Using default value: "abc"');
         createParamLensTest('requiredString', undefined, 'No value found');
 
-        createParamLensTest('optionalSecureString', 'def', 'Value: "def"');
+        createParamLensTest('optionalSecureString', '"def"', 'Value: "def"');
         createParamLensTest('optionalSecureString', undefined, 'Using default value: "abc"');
 
         createParamLensTest('optionalBool', 'true', 'Value: true');
@@ -221,10 +221,10 @@ suite("DeploymentTemplate code lens", () => {
         createParamLensTest('optionalObject', undefined, 'Using default value: {"myTrueProp": true}');
 
         createParamLensTest('optionalSecureObject', '{}', 'Value: {}');
-        createParamLensTest('optionalSecureObject', '{}', 'Value: {"value1": true}');
+        createParamLensTest('optionalSecureObject', undefined, 'Using default value: {"value1": true}');
 
         suite("undefined in param value", () => {
-            createParamLensTest('optionalString', 'undefined', 'Value: undefined');
+            createParamLensTest('optionalString', 'undefined', 'Using default value: "abc"');
         });
         suite("Expression in default value", () => {
             createParamLensTest('optionalString2', '"123"', 'Value: "123"');

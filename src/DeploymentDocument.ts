@@ -190,7 +190,7 @@ export abstract class ResolvableCodeLens extends CodeLens {
     }
 
     /**
-     * Must fill in the code lens title and command
+     * Must fill in the code lens title and command, or return false if no longer valid
      */
-    public abstract resolve(associatedDocument: DeploymentDocument | undefined): void;
+    public abstract resolve(associatedDocument: DeploymentDocument | undefined): boolean;
 }

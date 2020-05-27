@@ -518,7 +518,7 @@ class ShowCurrentParameterFileCodeLens extends ResolvableCodeLens {
         super(dt, span);
     }
 
-    public resolve(associatedDocument: DeploymentDocument | undefined): void {
+    public resolve(associatedDocument: DeploymentDocument | undefined): boolean {
         if (associatedDocument) {
             assert(associatedDocument instanceof DeploymentParameters);
             this.command = {
@@ -526,9 +526,10 @@ class ShowCurrentParameterFileCodeLens extends ResolvableCodeLens {
                 command: 'azurerm-vscode-tools.openParameterFile',
                 arguments: [this.deploymentDoc.documentId]
             };
-        } else {
-            this.command = { title: '', command: '' };
+            return true;
         }
+
+        return false;
     }
 }
 
@@ -540,7 +541,7 @@ class SelectParameterFileCodeLens extends ResolvableCodeLens {
         super(dt, span);
     }
 
-    public resolve(associatedDocument: DeploymentDocument | undefined): void {
+    public resolve(associatedDocument: DeploymentDocument | undefined): boolean {
         let title: string;
         if (associatedDocument) {
             assert(associatedDocument instanceof DeploymentParameters);
@@ -554,6 +555,7 @@ class SelectParameterFileCodeLens extends ResolvableCodeLens {
             command: 'azurerm-vscode-tools.selectParameterFile',
             arguments: [this.deploymentDoc.documentId]
         };
+        return true;
     }
 }
 
@@ -565,7 +567,7 @@ export class ParameterDefinitionCodeLens extends ResolvableCodeLens {
         super(dt, parameterDefinition.nameValue.span);
     }
 
-    public resolve(associatedDocument: DeploymentDocument | undefined): void {
+    public resolve(associatedDocument: DeploymentDocument | undefined): boolean {
         if (associatedDocument) {
             assert(associatedDocument instanceof DeploymentParameters);
             const dp = associatedDocument as DeploymentParameters;
@@ -585,15 +587,16 @@ export class ParameterDefinitionCodeLens extends ResolvableCodeLens {
 
             this.command = {
                 title: title,
-                command: "azurerm-vscode-tools.codeLens.gotoParameterValue", //asdf
+                command: "azurerm-vscode-tools.codeLens.gotoParameterValue",
                 arguments: [
                     dp.documentId,
-                    this.parameterDefinition.nameValue.unquotedValue // asdf if not found, should go to start of file or to "parameters"
+                    this.parameterDefinition.nameValue.unquotedValue
                 ]
             };
-        } else {
-            this.command = { title: '', command: '' };
+            return true;
         }
+
+        return false;
     }
 }
 
@@ -621,8 +624,9 @@ class NestedTemplateCodeLen extends ResolvableCodeLens {
         }
     }
 
-    public resolve(_associatedDocument: DeploymentDocument | undefined): void {
+    public resolve(_associatedDocument: DeploymentDocument | undefined): boolean {
         // Nothing else to do
+        return true;
     }
 }
 

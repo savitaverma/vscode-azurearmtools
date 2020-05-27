@@ -10,6 +10,7 @@ import * as fse from 'fs-extra';
 import * as path from 'path';
 import * as vscode from "vscode";
 import { AzureUserInput, callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, createAzExtOutputChannel, IActionContext, registerCommand, registerUIExtensionVariables, TelemetryProperties } from "vscode-azureextensionui";
+import { Language } from "../extension.bundle";
 import * as Completion from "./Completion";
 import { armTemplateLanguageId, configKeys, configPrefix, expressionsDiagnosticsCompletionMessage, expressionsDiagnosticsSource, globalStateKeys, outputChannelName } from "./constants";
 import { DeploymentDocument, ResolvableCodeLens } from "./DeploymentDocument";
@@ -206,12 +207,14 @@ export class AzureRMTools {
                 const editor = await vscode.window.showTextDocument(textDocument);
                 const dp = this.getOpenedDeploymentParameters(uri);
                 if (dp) {
-                    const span = dp.getParameterValue(param)?.value?.span;
-                    if (span) {
-                        const range = getVSCodeRangeFromSpan(dp, span);
-                        editor.selection = new vscode.Selection(range.start, range.end);
-                        editor.revealRange(range);
-                    }
+                    // If the parameter isn't in the param file, show the properties section or beginning
+                    //   of file.
+                    const span = dp.getParameterValue(param)?.value?.span
+                        ?? dp.parametersProperty?.nameValue.span
+                        ?? new Language.Span(0, 0);
+                    const range = getVSCodeRangeFromSpan(dp, span);
+                    editor.selection = new vscode.Selection(range.start, range.end);
+                    editor.revealRange(range);
                 }
             });
 
@@ -1024,18 +1027,24 @@ export class AzureRMTools {
     }
 
     private async onResolveCodeLens(codeLens: vscode.CodeLens, token: vscode.CancellationToken): Promise<vscode.CodeLens | undefined> {
-        if (codeLens instanceof ResolvableCodeLens) {
-            const cancel = new Cancellation(token);
-            const { doc, associatedDoc } = await this.getDeploymentDocAndAssociatedDoc(codeLens.deploymentDoc.documentId, cancel);
-            if (doc && codeLens.deploymentDoc === doc) {
-                codeLens.resolve(associatedDoc);
-                return codeLens;
-            }
-        } else {
-            assert.fail('Expected ResolvableCodeLens instance');
-        }
+        return await callWithTelemetryAndErrorHandling('ResolveCodeLens', async (actionContext: IActionContext): Promise<vscode.CodeLens | undefined> => {
+            actionContext.errorHandling.suppressReportIssue = true; //asdf
 
-        return undefined;
+            if (codeLens instanceof ResolvableCodeLens) {
+                const cancel = new Cancellation(token);
+                const { doc, associatedDoc } = await this.getDeploymentDocAndAssociatedDoc(codeLens.deploymentDoc.documentId, cancel);
+                if (doc && codeLens.deploymentDoc === doc) {
+                    if (codeLens.resolve(associatedDoc)) {
+                        assert(codeLens.command?.command && codeLens.command.title, "CodeLens wasn't resolved");
+                        return codeLens;
+                    }
+                }
+            } else {
+                assert.fail('Expected ResolvableCodeLens instance');
+            }
+
+            return undefined;
+        });
     }
 
     private async onProvideHover(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Hover | undefined> {
