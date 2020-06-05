@@ -22,7 +22,7 @@ export class TempFile {
         fs.writeFileSync(this.fsPath, contents);
     }
 
-    public static fromExistingFile(filepath: string): TempFile {
+    public static copyFromExistingFile(filepath: string): TempFile {
         const contents: string = fse.readFileSync(filepath).toString();
         return new TempFile(contents, path.basename(filepath), path.extname(filepath));
     }
