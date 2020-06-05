@@ -559,7 +559,13 @@ export class AzureRMTools {
         // tslint:disable-next-line: no-floating-promises
         ++this._diagnosticsVersion;
 
+        // tslint:disable-next-line: no-console asdf
+        console.log(`reportDeploymentDocumentErrors: ${deploymentDocument.documentId}, ${associatedDocument?.documentId}`);
+
         let errors: language.Issue[] = await deploymentDocument.getErrors(associatedDocument);
+        // tslint:disable-next-line: no-console asdf
+        console.log(`  ${errors.length} errors`);
+
         const diagnostics: vscode.Diagnostic[] = [];
 
         for (const error of errors) {
@@ -567,6 +573,9 @@ export class AzureRMTools {
         }
 
         const warnings = deploymentDocument.getWarnings();
+        // tslint:disable-next-line: no-console asdf
+        console.log(`  ${warnings.length} warnings`);
+
         for (const warning of warnings) {
             diagnostics.push(this.getVSCodeDiagnosticFromIssue(deploymentDocument, warning, vscode.DiagnosticSeverity.Warning));
         }
