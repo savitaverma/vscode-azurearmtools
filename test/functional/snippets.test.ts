@@ -410,7 +410,7 @@ suite("Snippets functional tests", () => {
 
         let tempTemplateFile: TempFile | undefined;
         try {
-            tempTemplateFile = new TempFile(template, `snippet ${snippetName}`, '.azrm');
+            tempTemplateFile = new TempFile(template, `snippet ${snippetName}`.replace(/ /g, '-'), '.azrm');
 
             let doc = await workspace.openTextDocument(tempTemplateFile.uri);
             await window.showTextDocument(doc);
