@@ -9,14 +9,14 @@ import { ext } from '../../extension.bundle';
 import { logsFolder } from '../testConstants';
 
 export async function publishVsCodeLogs(extensionid: string | undefined): Promise<void> {
-    ext.outputChannel.appendLine(`Copying the vscode logs for ${extensionid ?? 'all'}...`);
+    console.warn(`Copying the vscode logs for ${extensionid ?? 'all'}...`);
     const parentPath = path.dirname(ext.context.logPath);
     const sourcePath = path.join(parentPath, extensionid ?? '..');
     const destFolderPath = path.join(logsFolder, extensionid ?? 'all');
     await fse.mkdir(destFolderPath);
 
-    ext.outputChannel.appendLine(`Source: ${sourcePath}`);
-    ext.outputChannel.appendLine(`Dest: ${destFolderPath}`);
+    console.warn(`Source: ${sourcePath}`);
+    console.warn(`Dest: ${destFolderPath}`);
 
     if (fse.pathExistsSync(sourcePath)) {
         await fse.copy(sourcePath, destFolderPath, {
