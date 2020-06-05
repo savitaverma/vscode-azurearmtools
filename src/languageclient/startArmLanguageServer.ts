@@ -101,6 +101,7 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
         let trace: string = workspace.getConfiguration(configPrefix).get<string>(configKeys.traceLevel)
             // tslint:disable-next-line: strict-boolean-expressions
             || defaultTraceLevel;
+        trace = "Debug";
 
         let commonArgs = [
             serverDllPath,
