@@ -293,8 +293,8 @@ export async function getDiagnosticsForDocument(
         const requiredSourceCompletionVersions = Object.assign({}, initialResults.sourceCompletionVersions);
         if (options.waitForChange) {
             // tslint:disable-next-line:no-for-in forin
-            for (let source in requiredSourceCompletionVersions) {
-                requiredSourceCompletionVersions[source] = requiredSourceCompletionVersions[source] + 1;
+            for (let source of filterSources) {
+                requiredSourceCompletionVersions[source.name] = requiredSourceCompletionVersions[source.name] + 1;
             }
         }
 

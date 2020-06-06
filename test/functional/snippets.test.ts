@@ -415,13 +415,21 @@ suite("Snippets functional tests", () => {
             let doc = await workspace.openTextDocument(tempTemplateFile.uri);
             await window.showTextDocument(doc);
 
-            // Map template to empty params file to enable full validation
-            const emptyParamsPath = path.join(basePath, "/test/templates/empty.params.json");
-            await ext.deploymentFileMapping.getValue().mapParameterFile(tempTemplateFile.uri, Uri.file(emptyParamsPath));
-
             // Wait for first set of diagnostics to finish.
             await getDiagnosticsForDocument(doc, {});
             const initialDocText = window.activeTextEditor!.document.getText();
+
+            // Map template to empty params file to enable full validation
+            let promise1 = getDiagnosticsForDocument(
+                doc,
+                {
+                    waitForChange: true,
+                    ignoreSources: [sources.expressions]
+                });
+            const emptyParamsPath = path.join(basePath, "/test/templates/empty.params.json");
+            await ext.deploymentFileMapping.getValue().mapParameterFile(tempTemplateFile.uri, Uri.file(emptyParamsPath));
+            // Wait for revalidation
+            await promise1;
 
             // Start waiting for next set of diagnostics (so it picks up the current completion versions)
             let diagnosticsPromise: Promise<Diagnostic[]> = getDiagnosticsForDocument(

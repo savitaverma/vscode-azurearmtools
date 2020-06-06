@@ -8,10 +8,11 @@ import * as os from 'os';
 import * as path from 'path';
 import { ProgressLocation, window, workspace } from 'vscode';
 import { callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, IActionContext, parseError } from 'vscode-azureextensionui';
-import { LanguageClient, LanguageClientOptions, RevealOutputChannelOn, ServerOptions } from 'vscode-languageclient';
+import { CancellationToken, ConfigurationParams, ConfigurationRequest, LanguageClient, LanguageClientOptions, RevealOutputChannelOn, ServerOptions } from 'vscode-languageclient';
 import { acquireSharedDotnetInstallation } from '../acquisition/acquireSharedDotnetInstallation';
 import { armTemplateLanguageId, configKeys, configPrefix, downloadDotnetVersion, languageFriendlyName, languageServerFolderName, languageServerName } from '../constants';
 import { ext } from '../extensionVariables';
+//import {HandlerSignature} from "vscode-jsonrpc";
 import { assert } from '../fixed_assert';
 import { templateDocumentSelector } from '../supported';
 import { WrappedErrorHandler } from './WrappedErrorHandler';
@@ -133,6 +134,21 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
             revealOutputChannelOn: RevealOutputChannelOn.Error,
             synchronize: {
                 configurationSection: configPrefix
+            },
+            //progressOnInitialization: true, //asdf
+            initializationOptions: "asdf",
+            middleware: {
+                workspace: {
+                    // tslint:disable-next-line: no-any
+                    configuration: <MiddlewareSignature>(params: ConfigurationParams, token: CancellationToken, next: ConfigurationRequest.HandlerSignature): any[] => {
+                        next(params, token);
+                        return params.items;
+                    },
+                    // tslint:disable-next-line: no-function-expression
+                    didChangeConfiguration: (sections: string[] | undefined, next: (sections: string[] | undefined) => void): void => {
+                        next(sections);
+                    }
+                }
             }
         };
 
@@ -159,6 +175,7 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
             window.showWarningMessage(`The ${configPrefix}.languageServer.waitForDebugger option is set.  The language server will pause on startup until a debugger is attached.`);
         }
 
+        client.info("asdf");
         client.onTelemetry((telemetryData: { eventName: string; properties: { [key: string]: string | undefined } }) => {
             callWithTelemetryAndErrorHandlingSync(telemetryData.eventName, telemetryActionContext => {
                 telemetryActionContext.errorHandling.suppressDisplay = true;
@@ -172,6 +189,12 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
 
             await client.onReady();
             ext.languageServerClient = client;
+
+            client.onNotification('', (...params: unknown[]) => {
+                // tslint:disable-next-line: no-console
+                console.log('notfcaton');
+            });
+
         } catch (error) {
             throw new Error(
                 `${languageServerName}: An error occurred starting the language server.${os.EOL}${os.EOL}${parseError(error).message}`
