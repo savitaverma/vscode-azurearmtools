@@ -16,12 +16,12 @@ import { Histogram } from "./Histogram";
 import { INamedDefinition } from "./INamedDefinition";
 import * as Json from "./JSON";
 import * as language from "./Language";
-import { DeploymentParameters } from "./parameterFiles/DeploymentParameters";
+import { DeploymentParameters, IParameterValues } from "./parameterFiles/DeploymentParameters";
 import { ReferenceList } from "./ReferenceList";
 import { isArmSchema } from "./schemas";
 import { TemplatePositionContext } from "./TemplatePositionContext";
 import { TemplateScope, TemplateScopeKind } from "./TemplateScope";
-import { TopLevelTemplateScope } from './templateScopes';
+import { NestedTemplateInnerScope, TopLevelTemplateScope } from './templateScopes';
 import * as TLE from "./TLE";
 import { UserFunctionParameterDefinition } from './UserFunctionParameterDefinition';
 import { nonNullValue } from './util/nonNull';
@@ -56,6 +56,7 @@ export class DeploymentTemplate extends DeploymentDocument {
     public get topLevelScope(): TemplateScope {
         return this._topLevelScope.getOrCacheValue(() =>
             new TopLevelTemplateScope(
+                this.documentUri,
                 this.topLevelValue,
                 `Top-level template scope for ${this.documentUri}`
             )
@@ -431,12 +432,12 @@ export class DeploymentTemplate extends DeploymentDocument {
         return this.getDocumentText(spanOfValueInsideString, parentStringToken.span.startIndex);
     }
 
-    public getCodeLenses(hasAssociatedParameters: boolean): ResolvableCodeLens[] {
-        return this.getParameterCodeLenses(hasAssociatedParameters)
+    public getCodeLenses(hasAssociatedParameters: boolean, getParameterValues: () => Promise<IParameterValues>): ResolvableCodeLens[] {
+        return this.getParameterCodeLenses(hasAssociatedParameters, getParameterValues)
             .concat(this.getNestedTemplateCodeLenses());
     }
 
-    private getParameterCodeLenses(hasAssociatedParameters: boolean): ResolvableCodeLens[] {
+    private getParameterCodeLenses(hasAssociatedParameters: boolean, getParameterValues: () => Promise<IParameterValues>): ResolvableCodeLens[] {
         if (!ext.configuration.get<boolean>(configKeys.codeLensForParameters)) {
             return [];
         }
@@ -454,7 +455,19 @@ export class DeploymentTemplate extends DeploymentDocument {
 
         if (hasAssociatedParameters) {
             // Code lens for each parameter definition
-            lenses.push(...this.topLevelScope.parameterDefinitions.map(pd => new ParameterDefinitionCodeLens(this, pd)));
+            lenses.push(...this.topLevelScope.parameterDefinitions.map(pd =>
+                new ParameterDefinitionCodeLens(
+                    this,
+                    pd,
+                    getParameterValues, //asdf
+                )));
+        }
+
+        const nestedScopes = <NestedTemplateInnerScope[]>this.allScopes.filter(s => s instanceof NestedTemplateInnerScope);
+        for (const nested of nestedScopes) {
+            //asdf find
+            lenses.push(...nested.parameterDefinitions.map(pd =>
+                new ParameterDefinitionCodeLens(this, pd, async (): Promise<IParameterValues> => nested.getParameterValues()))); //asdf
         }
 
         return lenses;

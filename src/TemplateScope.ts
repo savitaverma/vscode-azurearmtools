@@ -3,9 +3,11 @@
 // ----------------------------------------------------------------------------
 
 import * as assert from 'assert';
+import { Uri } from 'vscode';
 import { Json, Utilities } from '../extension.bundle';
 import { CachedValue } from './CachedValue';
 import { templateKeys } from './constants';
+import { IDocumentLocation } from './IDocumentLocation';
 import { IParameterDefinition } from "./IParameterDefinition";
 import { IResource } from './IResource';
 import * as TLE from "./TLE";
@@ -24,11 +26,19 @@ export enum TemplateScopeKind {
 /**
  * Represents the scoped access of parameters/variables/functions at a particular point in the template tree.
  */
-export abstract class TemplateScope {
+export abstract class TemplateScope implements IDocumentLocation {
     private _parameterDefinitions: CachedValue<IParameterDefinition[] | undefined> = new CachedValue<IParameterDefinition[] | undefined>();
     private _variableDefinitions: CachedValue<IVariableDefinition[] | undefined> = new CachedValue<IVariableDefinition[] | undefined>();
     private _functionDefinitions: CachedValue<UserFunctionNamespaceDefinition[] | undefined> = new CachedValue<UserFunctionNamespaceDefinition[] | undefined>();
     private _resources: CachedValue<IResource[] | undefined> = new CachedValue<IResource[] | undefined>();
+
+    constructor(
+        public readonly documentUri: Uri,
+        public readonly rootObject: Json.ObjectValue | undefined,
+        // tslint:disable-next-line:variable-name
+        public readonly __debugDisplay: string // Provides context for debugging
+    ) {
+    }
 
     public readonly abstract scopeKind: TemplateScopeKind;
 
@@ -57,13 +67,6 @@ export abstract class TemplateScope {
     protected getResources(): IResource[] | undefined {
         // undefined means not supported in this context
         return undefined;
-    }
-
-    constructor(
-        public readonly rootObject: Json.ObjectValue | undefined,
-        // tslint:disable-next-line:variable-name
-        public readonly __debugDisplay: string // Provides context for debugging
-    ) {
     }
 
     public get parameterDefinitions(): IParameterDefinition[] {

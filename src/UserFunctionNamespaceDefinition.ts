@@ -3,9 +3,11 @@
 // ----------------------------------------------------------------------------
 
 import * as os from 'os';
+import { Uri } from 'vscode';
 import { CachedValue } from './CachedValue';
 import { assert } from './fixed_assert';
 import { IUsageInfo } from './Hover';
+import { IDocumentLocation } from './IDocumentLocation';
 import { DefinitionKind, INamedDefinition } from './INamedDefinition';
 import * as Json from "./JSON";
 import * as language from "./Language";
@@ -19,7 +21,7 @@ export function isUserNamespaceDefinition(definition: INamedDefinition): definit
 /**
  * This class represents the definition of a user-defined namespace in a deployment template.
  */
-export class UserFunctionNamespaceDefinition implements INamedDefinition {
+export class UserFunctionNamespaceDefinition implements INamedDefinition, IDocumentLocation {
     /* Example:
 
             "functions": [
@@ -48,16 +50,17 @@ export class UserFunctionNamespaceDefinition implements INamedDefinition {
     private _members: CachedValue<UserFunctionDefinition[]> = new CachedValue<UserFunctionDefinition[]>();
 
     private constructor(
+        public readonly documentUri: Uri,
         public readonly nameValue: Json.StringValue,
         private readonly _value: Json.ObjectValue
     ) {
         assert(_value);
     }
 
-    public static createIfValid(functionValue: Json.ObjectValue): UserFunctionNamespaceDefinition | undefined {
+    public static createIfValid(documentUri: Uri, functionValue: Json.ObjectValue): UserFunctionNamespaceDefinition | undefined {
         let nameValue: Json.StringValue | undefined = Json.asStringValue(functionValue.getPropertyValue("namespace"));
         if (nameValue) {
-            return new UserFunctionNamespaceDefinition(nameValue, functionValue);
+            return new UserFunctionNamespaceDefinition(documentUri, nameValue, functionValue);
         }
 
         return undefined;
@@ -84,7 +87,7 @@ export class UserFunctionNamespaceDefinition implements INamedDefinition {
                     let name: Json.StringValue = member.nameValue;
                     let value = Json.asObjectValue(member.value);
                     if (value) {
-                        let func = new UserFunctionDefinition(this, name, value, member.span);
+                        let func = new UserFunctionDefinition(this.documentUri, this, name, value, member.span);
                         membersResult.push(func);
                     }
                 }
