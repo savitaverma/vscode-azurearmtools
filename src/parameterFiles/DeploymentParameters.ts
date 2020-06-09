@@ -18,13 +18,14 @@ import { ReferenceList } from "../ReferenceList";
 import { isParametersSchema } from "../schemas";
 import { indentMultilineString } from "../util/multilineStrings";
 import { getVSCodePositionFromPosition, getVSCodeRangeFromSpan } from "../util/vscodePosition";
+import { IParameterValues } from './IParameterValues';
 import { ParametersPositionContext } from "./ParametersPositionContext";
 import { ParameterValueDefinition } from "./ParameterValueDefinition";
 
 /**
  * Represents a deployment parameter file
  */
-export class DeploymentParameters extends DeploymentDocument {
+export class DeploymentParameters extends DeploymentDocument implements IParameterValues {
     private _parameterValueDefinitions: CachedValue<ParameterValueDefinition[]> = new CachedValue<ParameterValueDefinition[]>();
     private _parametersProperty: CachedValue<Json.Property | undefined> = new CachedValue<Json.Property | undefined>();
 
@@ -38,7 +39,11 @@ export class DeploymentParameters extends DeploymentDocument {
         super(documentText, documentUri);
     }
 
-    public hasParametersUri(): boolean {
+    public get parametersContainingDocument(): DeploymentDocument {
+        return this;
+    }
+
+    public hasParametersSchema(): boolean {
         return isParametersSchema(this.schemaUri);
     }
 
@@ -46,7 +51,7 @@ export class DeploymentParameters extends DeploymentDocument {
     public getParameterValue(parameterName: string): ParameterValueDefinition | undefined {
         // Number of parameters generally small, not worth creating a case-insensitive dictionary
         const parameterNameLC = parameterName.toLowerCase();
-        for (let param of this.parameterValues) {
+        for (let param of this.parameterValuesDefinitions) {
             if (param.nameValue.unquotedValue.toLowerCase() === parameterNameLC) {
                 return param;
             }
@@ -55,7 +60,7 @@ export class DeploymentParameters extends DeploymentDocument {
         return undefined;
     }
 
-    public get parameterValues(): ParameterValueDefinition[] {
+    public get parameterValuesDefinitions(): ParameterValueDefinition[] {
         return this._parameterValueDefinitions.getOrCacheValue(() => {
             const parameterDefinitions: ParameterValueDefinition[] = [];
 
@@ -213,7 +218,7 @@ export class DeploymentParameters extends DeploymentDocument {
 
             // Determine indentation
             const parametersObjectIndent = this.getDocumentPosition(this.parametersProperty?.nameValue.span.startIndex).column;
-            const lastParameter = this.parameterValues.length > 0 ? this.parameterValues[this.parameterValues.length - 1] : undefined;
+            const lastParameter = this.parameterValuesDefinitions.length > 0 ? this.parameterValuesDefinitions[this.parameterValuesDefinitions.length - 1] : undefined;
             const lastParameterIndent = lastParameter ? this.getDocumentPosition(lastParameter?.fullSpan.startIndex).column : undefined;
             const newTextIndent = lastParameterIndent === undefined ? parametersObjectIndent + defaultTabSize : lastParameterIndent;
             let indentedText = indentMultilineString(newText, newTextIndent);
@@ -251,12 +256,12 @@ export class DeploymentParameters extends DeploymentDocument {
 
     public createEditToAddCommaBeforePosition(documentIndex: number): { insertText: string; span: language.Span } | undefined {
         // Are there are any parameters before the one being inserted?
-        const newParamIndex = this.parameterValues
+        const newParamIndex = this.parameterValuesDefinitions
             .filter(
                 p => p.fullSpan.endIndex < documentIndex)
             .length;
         if (newParamIndex > 0) {
-            const prevParameter = this.parameterValues[newParamIndex - 1];
+            const prevParameter = this.parameterValuesDefinitions[newParamIndex - 1];
             assert(prevParameter);
 
             // Is there already a comma after the last parameter?
