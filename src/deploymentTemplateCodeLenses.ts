@@ -168,3 +168,26 @@ export class NestedTemplateCodeLen extends ResolvableCodeLens {
         return true;
     }
 }
+
+export class LinkedTemplateCodeLen extends ResolvableCodeLens {
+    private constructor(
+        dt: DeploymentTemplate,
+        span: Language.Span,
+        title: string
+    ) {
+        super(dt, span);
+        this.command = {
+            title: title,
+            command: ''
+        };
+    }
+
+    public static create(dt: DeploymentTemplate, span: Language.Span): LinkedTemplateCodeLen {
+        return new LinkedTemplateCodeLen(dt, span, "Linked template");
+    }
+
+    public resolve(_associatedDocument: DeploymentDocument | undefined): boolean {
+        // Nothing else to do
+        return true;
+    }
+}
