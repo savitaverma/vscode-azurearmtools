@@ -4,14 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as os from 'os';
+import * as path from 'path';
 import * as vscode from "vscode";
 import { IAzExtOutputChannel, IAzureUserInput } from "vscode-azureextensionui";
 import { LanguageClient } from "vscode-languageclient";
 import { CompletionsSpy } from "./CompletionsSpy";
 import { IConfiguration, VsCodeConfiguration } from "./Configuration";
-import { configPrefix, isWebpack } from "./constants";
+import { assetsPath, configPrefix, isWebpack } from "./constants";
 import { LanguageServerState } from "./languageclient/startArmLanguageServer";
 import { DeploymentFileMapping } from "./parameterFiles/DeploymentFileMapping";
+import { SnippetManager } from './SnippetManager';
 import { JsonOutlineProvider } from "./Treeview";
 import { InitializeBeforeUse } from "./util/InitializeBeforeUse";
 
@@ -69,6 +71,7 @@ class ExtensionVariables {
 
     public readonly completionItemsSpy: CompletionsSpy = new CompletionsSpy();
     public deploymentFileMapping: InitializeBeforeUse<DeploymentFileMapping> = new InitializeBeforeUse<DeploymentFileMapping>();
+    public snippetManager: SnippetManager = new SnippetManager(path.join(assetsPath, "armsnippets.jsonc"));
 }
 
 // tslint:disable-next-line: no-any

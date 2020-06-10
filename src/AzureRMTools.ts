@@ -1112,7 +1112,7 @@ export class AzureRMTools {
                 const triggerCharacter = context.triggerKind === vscode.CompletionTriggerKind.TriggerCharacter
                     ? context.triggerCharacter
                     : undefined;
-                const items: Completion.Item[] = pc.getCompletionItems(triggerCharacter);
+                const items: Completion.Item[] = await pc.getCompletionItems(triggerCharacter);
                 const vsCodeItems = items.map(c => toVsCodeCompletionItem(pc.document, c));
                 ext.completionItemsSpy.postCompletionItemsResult(pc.document, items, vsCodeItems);
 

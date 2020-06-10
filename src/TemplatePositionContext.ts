@@ -9,6 +9,7 @@ import { CachedValue } from "./CachedValue";
 import * as Completion from "./Completion";
 import { templateKeys } from "./constants";
 import { DeploymentTemplate } from "./DeploymentTemplate";
+import { ext } from "./extensionVariables";
 import { assert } from './fixed_assert';
 import { getResourceIdCompletions } from "./getResourceIdCompletions";
 import { IFunctionMetadata, IFunctionParameterMetadata } from "./IFunctionMetadata";
@@ -19,6 +20,7 @@ import * as language from "./Language";
 import { DeploymentParameters } from "./parameterFiles/DeploymentParameters";
 import { IReferenceSite, PositionContext, ReferenceSiteKind } from "./PositionContext";
 import * as Reference from "./ReferenceList";
+import { SnippetManager } from "./SnippetManager";
 import { TemplateScope } from "./TemplateScope";
 import * as TLE from "./TLE";
 import { UserFunctionDefinition } from "./UserFunctionDefinition";
@@ -65,6 +67,8 @@ export class TemplatePositionContext extends PositionContext {
     public get document(): DeploymentTemplate {
         return <DeploymentTemplate>super.document;
     }
+
+    public snippetManager: SnippetManager = ext.snippetManager;
 
     /**
      * Retrieves TleInfo for the current position if it's inside a string
@@ -177,11 +181,23 @@ export class TemplatePositionContext extends PositionContext {
         return undefined;
     }
 
-    public getCompletionItems(triggerCharacter: string | undefined): Completion.Item[] {
+    public async getCompletionItems(triggerCharacter: string | undefined): Promise<Completion.Item[]> {
         const tleInfo = this.tleInfo;
         if (!tleInfo) {
             // No string at this location
-            return [];
+            const index = this.documentCharacterIndex;
+            let tokenAtCursor = this.document.getJSONTokenAtDocumentCharacterIndex(index);
+            if (!tokenAtCursor && index > 0) {
+                const tokenAfterCursor = this.document.getJSONTokenAtDocumentCharacterIndex(index - 1);
+                if (tokenAfterCursor) {
+                    const line = this.document.getDocumentPosition(tokenAfterCursor.span.startIndex).line;
+                    if (line === this.documentPosition.line) {
+                        tokenAtCursor = tokenAfterCursor; //asdf
+                    }
+                }
+            }
+            const span = tokenAtCursor?.span ?? this.emptySpanAtDocumentCharacterIndex;
+            return await this.snippetManager.getCompletionItems(span, triggerCharacter);
         }
 
         // We're inside a JSON string. It may or may not contain square brackets.
