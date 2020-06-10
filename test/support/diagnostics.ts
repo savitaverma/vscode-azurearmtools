@@ -18,7 +18,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Diagnostic, DiagnosticSeverity, Disposable, languages, TextDocument } from "vscode";
 import { diagnosticsCompletePrefix, expressionsDiagnosticsSource, ExpressionType, ext, LanguageServerState, languageServerStateSource } from "../../extension.bundle";
-import { DISABLE_LANGUAGE_SERVER } from "../testConstants";
+import { DISABLE_LANGUAGE_SERVER, parameterFilesChangedNotification } from "../testConstants";
+import { delay } from "./delay";
+import { ensureLanguageServerAvailable } from "./ensureLanguageServerAvailable";
 import { parseParametersWithMarkers } from "./parseTemplate";
 import { stringify } from "./stringify";
 import { TempDocument, TempEditor, TempFile } from "./TempFile";
@@ -215,6 +217,38 @@ export async function testDiagnostics(json: string | Partial<IDeploymentTemplate
 async function testDiagnosticsCore(templateContentsOrFileName: string | Partial<IDeploymentTemplate>, options: ITestDiagnosticsOptions, expected: string[]): Promise<void> {
     let actual: Diagnostic[] = await getDiagnosticsForTemplate(templateContentsOrFileName, options);
     compareDiagnostics(actual, expected, options);
+}
+
+let paramFilesChangedEventsHookedUp = false;
+let paramFilesChangedEvents = 0;
+
+export async function waitForParameterFilesChanged(action: () => Promise<void>): Promise<void> {
+    await ensureLanguageServerAvailable();
+
+    if (!paramFilesChangedEventsHookedUp) {
+        paramFilesChangedEventsHookedUp = true;
+        ext.languageServerClient?.onNotification(parameterFilesChangedNotification, () => {
+            ++paramFilesChangedEvents;
+        });
+    }
+
+    const expected = paramFilesChangedEvents + 1;
+
+    await action();
+
+    const timeOutAt = Date.now() + diagnosticsTimeout;
+    await new Promise(async (resolve, reject): Promise<void> => {
+        // tslint:disable-next-line: no-constant-condition
+        while (true) {
+            if (paramFilesChangedEvents >= expected) {
+                resolve();
+            } else if (Date.now() > timeOutAt) {
+                reject(new Error('Timed out waiting for notification from language server that the parameter files configuration changed'));
+            }
+
+            await delay(25);
+        }
+    });
 }
 
 export async function getDiagnosticsForDocument(
