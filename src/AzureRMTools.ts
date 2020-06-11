@@ -1146,8 +1146,8 @@ export class AzureRMTools {
 
         const doc: DeploymentDocument | undefined = this.getOpenedDeploymentDocument(uri);
         if (doc) { //asdf
-            // If the parameter isn't in the param file, show the properties section or beginning
-            //   of file.
+            // If the parameter doesn't have a value to navigate to, then show the
+            // properties section or beginning of the param file/nested template.
             const span = parameterValues.getParameterValue(param)?.value?.span
                 ?? parameterValues.parametersProperty?.nameValue.span
                 ?? new Language.Span(0, 0);
