@@ -9,7 +9,7 @@ import { ResolvableCodeLens } from "./DeploymentDocument";
 import { DeploymentTemplate } from './DeploymentTemplate';
 import { ext } from './extensionVariables';
 import { IParameterDefinition } from './IParameterDefinition';
-import { IParameterValues } from "./parameterFiles/DeploymentParameters";
+import { IParameterValues } from "./parameterFiles/IParameterValues";
 import { getRelativeParameterFilePath } from './parameterFiles/parameterFiles';
 import { TemplateScopeKind } from "./TemplateScope";
 

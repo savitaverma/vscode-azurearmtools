@@ -9,7 +9,6 @@ import { CachedValue } from "../CachedValue";
 import { templateKeys } from "../constants";
 import { DeploymentDocument, ResolvableCodeLens } from "../DeploymentDocument";
 import { DeploymentTemplate } from "../DeploymentTemplate";
-import { IDocumentLocation } from '../IDocumentLocation';
 import { INamedDefinition } from "../INamedDefinition";
 import { IParameterDefinition } from "../IParameterDefinition";
 import * as Json from "../JSON";
@@ -19,22 +18,9 @@ import { ReferenceList } from "../ReferenceList";
 import { isParametersSchema } from "../schemas";
 import { indentMultilineString } from "../util/multilineStrings";
 import { getVSCodePositionFromPosition, getVSCodeRangeFromSpan } from "../util/vscodePosition";
+import { IParameterValues } from './IParameterValues';
 import { ParametersPositionContext } from "./ParametersPositionContext";
 import { ParameterValueDefinition } from "./ParameterValueDefinition";
-
-/**
- * Represents a "parameters" object in a deployment template or parameter file
- * which contains parameter values (not definitions) for a template file or
- * linked/nested template
- */
-export interface IParameterValues extends IDocumentLocation {
-    // case-insensitive
-    getParameterValue(parameterName: string): ParameterValueDefinition | undefined;
-    parameterValuesDefiniitions: ParameterValueDefinition[];
-
-    parametersProperty: Json.Property | undefined;
-    parametersObjectValue: Json.ObjectValue | undefined;
-}
 
 /**
  * Represents a deployment parameter file
@@ -53,7 +39,7 @@ export class DeploymentParameters extends DeploymentDocument implements IParamet
         super(documentText, documentUri);
     }
 
-    public get parametersContainingDocument(): DeploymentDocument {
+    public get parametersContainingDocumentasdf(): DeploymentDocument {
         return this;
     }
 
@@ -65,7 +51,7 @@ export class DeploymentParameters extends DeploymentDocument implements IParamet
     public getParameterValue(parameterName: string): ParameterValueDefinition | undefined {
         // Number of parameters generally small, not worth creating a case-insensitive dictionary
         const parameterNameLC = parameterName.toLowerCase();
-        for (let param of this.parameterValuesDefiniitions) {
+        for (let param of this.parameterValuesDefinitions) {
             if (param.nameValue.unquotedValue.toLowerCase() === parameterNameLC) {
                 return param;
             }
@@ -74,7 +60,7 @@ export class DeploymentParameters extends DeploymentDocument implements IParamet
         return undefined;
     }
 
-    public get parameterValuesDefiniitions(): ParameterValueDefinition[] {
+    public get parameterValuesDefinitions(): ParameterValueDefinition[] {
         return this._parameterValueDefinitions.getOrCacheValue(() => {
             const parameterDefinitions: ParameterValueDefinition[] = [];
 
@@ -169,30 +155,6 @@ export class DeploymentParameters extends DeploymentDocument implements IParamet
         return actions;
     }
 
-    private isParameterRequired(paramDef: IParameterDefinition): boolean {
-        return !paramDef.defaultValue;
-    }
-
-    private getMissingParameters(template: DeploymentTemplate | undefined, onlyRequiredParameters: boolean): IParameterDefinition[] {
-        if (!template) {
-            return [];
-        }
-
-        const results: IParameterDefinition[] = [];
-        for (let paramDef of template.topLevelScope.parameterDefinitions) {
-            const paramValue = this.getParameterValue(paramDef.nameValue.unquotedValue);
-            if (!paramValue) {
-                results.push(paramDef);
-            }
-        }
-
-        if (onlyRequiredParameters) {
-            return results.filter(p => this.isParameterRequired(p));
-        }
-
-        return results;
-    }
-
     public async addMissingParameters(
         editor: TextEditor,
         template: DeploymentTemplate,
@@ -232,7 +194,7 @@ export class DeploymentParameters extends DeploymentDocument implements IParamet
 
             // Determine indentation
             const parametersObjectIndent = this.getDocumentPosition(this.parametersProperty?.nameValue.span.startIndex).column;
-            const lastParameter = this.parameterValuesDefiniitions.length > 0 ? this.parameterValuesDefiniitions[this.parameterValuesDefiniitions.length - 1] : undefined;
+            const lastParameter = this.parameterValuesDefinitions.length > 0 ? this.parameterValuesDefinitions[this.parameterValuesDefinitions.length - 1] : undefined;
             const lastParameterIndent = lastParameter ? this.getDocumentPosition(lastParameter?.fullSpan.startIndex).column : undefined;
             const newTextIndent = lastParameterIndent === undefined ? parametersObjectIndent + defaultTabSize : lastParameterIndent;
             let indentedText = indentMultilineString(newText, newTextIndent);
@@ -270,12 +232,12 @@ export class DeploymentParameters extends DeploymentDocument implements IParamet
 
     public createEditToAddCommaBeforePosition(documentIndex: number): { insertText: string; span: language.Span } | undefined {
         // Are there are any parameters before the one being inserted?
-        const newParamIndex = this.parameterValuesDefiniitions
+        const newParamIndex = this.parameterValuesDefinitions
             .filter(
                 p => p.fullSpan.endIndex < documentIndex)
             .length;
         if (newParamIndex > 0) {
-            const prevParameter = this.parameterValuesDefiniitions[newParamIndex - 1];
+            const prevParameter = this.parameterValuesDefinitions[newParamIndex - 1];
             assert(prevParameter);
 
             // Is there already a comma after the last parameter?

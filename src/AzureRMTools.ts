@@ -27,7 +27,8 @@ import * as Json from "./JSON";
 import * as language from "./Language";
 import { startArmLanguageServerInBackground } from "./languageclient/startArmLanguageServer";
 import { DeploymentFileMapping } from "./parameterFiles/DeploymentFileMapping";
-import { DeploymentParameters, IParameterValues } from "./parameterFiles/DeploymentParameters";
+import { DeploymentParameters } from "./parameterFiles/DeploymentParameters";
+import { IParameterValues } from "./parameterFiles/IParameterValues";
 import { considerQueryingForParameterFile, getFriendlyPathToFile, openParameterFile, openTemplateFile, selectParameterFile } from "./parameterFiles/parameterFiles";
 import { setParameterFileContext } from "./parameterFiles/setParameterFileContext";
 import { IReferenceSite, PositionContext } from "./PositionContext";
@@ -563,7 +564,7 @@ export class AzureRMTools {
             measurements.parseDurationInMilliseconds = stopwatch.duration.totalMilliseconds;
             measurements.lineCount = parameters.lineCount;
             measurements.maxLineLength = parameters.getMaxLineLength();
-            measurements.paramsCount = parameters.parameterValuesDefiniitions.length;
+            measurements.paramsCount = parameters.parameterValuesDefinitions.length;
             measurements.commentCount = parameters.getCommentCount();
             measurements.linkedTemplateFiles = this._mapping.getTemplateFile(document.uri) ? 1 : 0;
             measurements.extErrorsCount = errorsWarnings.errors.length;

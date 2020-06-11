@@ -10,7 +10,7 @@ import { IParameterDefinition } from "./IParameterDefinition";
 import { IResource } from "./IResource";
 import * as Json from "./JSON";
 import { ParameterDefinition } from "./ParameterDefinition";
-import { IParameterValues } from "./parameterFiles/DeploymentParameters";
+import { IParameterValues } from "./parameterFiles/IParameterValues";
 import { ParameterValueDefinition } from "./parameterFiles/ParameterValueDefinition";
 import { Resource } from "./Resource";
 import { TemplateScope, TemplateScopeKind } from "./TemplateScope";
@@ -259,7 +259,7 @@ export class NestedTemplateInnerScope extends TemplateScopeFromObject {
                     ? new ParameterValueDefinition(parameterProperty)
                     : undefined;
             },
-            parameterValuesDefiniitions: ((): ParameterValueDefinition[] => {
+            parameterValuesDefinitions: ((): ParameterValueDefinition[] => {
                 const parameterProperties = //asdf?
                     this.parametersProperty?.value?.asObjectValue?.properties;
                 return parameterProperties

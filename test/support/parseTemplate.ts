@@ -117,7 +117,7 @@ export async function parseParametersWithMarkers(
     // tslint:disable-next-line:no-unused-expression
     dp.parametersObjectValue;
     // tslint:disable-next-line:no-unused-expression
-    dp.parameterValuesDefiniitions;
+    dp.parameterValuesDefinitions;
 
     return { dp, unmarkedText, markers };
 }
